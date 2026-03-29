@@ -10,7 +10,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Load the necessary libraries
+## Load the necessary libraries
 ```{r}
 library(ggplot2)
 library(tidyverse)
@@ -18,22 +18,27 @@ library(dplyr)
 library(CalibrationCurves)
 library(gam)
 library(MASS)
+library(pROC)
+library(e1071)
+library(tree)
 ```
 
-### Load the data
+## Data Preparation
+
+### Loading the data
+
 ```{r}
 hcv_data <- read.csv("C:/Users/anush/OneDrive/Desktop/Predictive Modelling/hcv+data/hcvdat0.csv")
 ```
 
-### Data Preparation
+### Inspecting Data
 
 ```{r}
-# Viewing the data
 head(hcv_data)
-
-# Checking the structure
 str(hcv_data)
 ```
+### Cleaning and Imputation
+
 ```{r}
 # Removal of X column as it is unnecessary for prediction
 hcv_data <- dplyr::select(hcv_data, -X)
@@ -48,6 +53,7 @@ for(col in numeric_vars){
 }
 ```
 
+### Encoding Variables and Creating Binary Outcome
 
 ```{r}
 # Converting variables into factor
@@ -63,6 +69,7 @@ hcv_data$Outcome <- factor(hcv_data$Outcome,
 
 table(hcv_data$Outcome)
 ```
+# Train/Test Split
 
 ```{r}
 # Splitting data into test and train
@@ -72,6 +79,8 @@ train_index <- sample(n, size = 0.7 * n)
 train_data <- hcv_data[train_index, ]   
 test_data  <- hcv_data[-train_index, ]  
 ```
+
+### Scaling
 
 ```{r}
 # Scaling
@@ -90,14 +99,21 @@ train_data[, numeric_vars] <- scaled_train
 test_data[, numeric_vars]  <- scaled_test
 ```
 
-
-### Logistic Regression Model
+### Brier Score
 ```{r}
+brier_score <- function(y, pred_prob) {
+  mean((y - pred_prob)^2)
+}
 
-# Convert Outcome to numeric 0/1
-y_test_numeric <- ifelse(test_data$Outcome == "Disease", 1, 0)
+# Numeric outcome vectors for evaluation
 y_train_numeric <- ifelse(train_data$Outcome == "Disease", 1, 0)
+y_test_numeric  <- ifelse(test_data$Outcome  == "Disease", 1, 0)
+```
 
+---
+
+### Model 1: Logistic Regression Model
+```{r}
 # Fit logistic regression on training data
 glm_fit <- glm(Outcome ~ . - Category, data = train_data, family = binomial)
 
@@ -106,9 +122,6 @@ prob_glm <- predict(glm_fit, newdata = test_data, type = "response")
 summary(prob_glm)
 
 # Brier score
-brier_score <- function(y, pred_prob) {
-  mean((y - pred_prob)^2)
-}
 brier_score(y_test_numeric, prob_glm)
 
 ```
@@ -121,128 +134,125 @@ table(hcv.pred, test_data$Outcome)
 mean(hcv.pred == test_data$Outcome)
 ```
 ```{r}
-library(pROC)
-
+#ROC Curve and AUC
 roc_obj.l <- roc(y_test_numeric, prob_glm)   
 plot(roc_obj.l, type = "s")
 auc(roc_obj.l)
 ```
+
 ```{r}
 # Calibration plot in test data
 valProbggplot(prob_glm, y_test_numeric)
 ```
 
+---
+
+### Model 2: Logistic Regression with Spline on Age (GAM)
 
 ```{r}
-# Adding spline in age
 gam.hcv<-gam(Outcome ~s(Age)+ Category+Sex+ALB+ALP+ALT+AST+BIL+CHE+CHOL+CREA+GGT+PROT
 , data =train_data, family = binomial)
 plot(gam.hcv)
 hcv.probs.gam<-predict(gam.hcv, newdata = test_data, type = "response") 
 brier_score(y_test_numeric, hcv.probs.gam)
-### using a 0.5 threshold for classification
+```
+
+```{r}
+# Confusion Matrix
 hcv.pred.gam <- rep("Healthy", nrow(test_data))
 hcv.pred.gam[hcv.probs.gam > 0.5] <- "Disease"
 table(hcv.pred.gam, test_data$Outcome)
 mean(hcv.pred.gam == test_data$Outcome)
 ```
 
-### Linear Discriminant Analysis
+```{r}
+# ROC Curve and AUC
+roc_obj_gam <- roc(y_test_numeric, hcv.probs.gam)
+plot(roc_obj_gam, type = "s", main = "ROC — GAM")
+auc(roc_obj_gam)
+```
+
+```{r}
+valProbggplot(hcv.probs.gam, y_test_numeric)
+```
+---
+
+### Model 3: Linear Discriminant Analysis
 
 ```{r}
 lda.fit <- lda(Outcome ~ ., data = train_data)
 lda.fit
 plot(lda.fit)
 ```
+
 ```{r}
 lda.pred <- predict(lda.fit, test_data)
-names(lda.pred)
-```
-```{r}
 lda.class <- lda.pred$class
-# Convert factor labels to numeric
+hcv.probs.lda  <- lda_pred$posterior[, 2]
+# Confusion Matrix
 lda_numeric <- ifelse(lda.class == "Disease", 1, 0)
 table(lda_numeric, y_test_numeric)
 mean(lda_numeric == y_test_numeric)
 ```
 
 ```{r}
+# Posterior Distribution Summary
 sum(lda.pred$posterior[, 2] < 0.5)
 sum(lda.pred$posterior[, 2] >= 0.5)
 ```
+
 ```{r}
-hcv.probs.lda<-lda.pred$posterior[, 2]
-roc_obj.lda <- roc(y_test_numeric, hcv.probs.lda)
-plot(roc_obj.lda, type = "s", col = "slateblue3")
-lines(roc_obj.l, type = "s", col = "lightsalmon3")
-auc(roc_obj.lda)
-brier_score(y_test_numeric, hcv.probs.lda)
+# ROC curve and AUC
+roc_obj_lda <- roc(y_test_numeric, prob_lda)
+plot(roc_obj_lda, type = "s", col = "slateblue3", main = "ROC — LDA")
+auc(roc_obj_lda)
+brier_score(y_test_numeric, prob_lda)
 ```
+
 ```{r}
 valProbggplot(hcv.probs.lda, y_test_numeric)
 ```
-### Quadratic Discriminant Analysis:
-```{r}
-qda.fit <- qda(Outcome ~ Age + Sex + ALB + ALP + ALT + AST, data = train_data)
-qda.fit
-```
-```{r}
-qda.pred <- predict(qda.fit, test_data)
-qda.class <- qda.pred$class
-table(qda.class, y_test_numeric)
-mean(qda.class == y_test_numeric)
-```
-```{r}
-qda.prob <- qda.pred$posterior[, 2]
+---
 
-roc_obj.qda <- roc(y_test_numeric, qda.prob)
-plot(roc_obj.qda)
-auc(roc_obj.qda)
-```
-```{r}
-valProbggplot(qda.prob, y_test_numeric)
-```
-
-
-
-### Naive Bayes:
+### Model 4: Naive Bayes
 
 ```{r}
-library(e1071)
-factor_vars <- c("Sex")  
-for (v in factor_vars) {
-  train_data[[v]] <- as.factor(train_data[[v]])
-  test_data[[v]]  <- as.factor(test_data[[v]])
-}
+train_data$Sex <- as.factor(train_data$Sex)
+test_data$Sex  <- as.factor(test_data$Sex)
+
 nb.fit <- naiveBayes(Outcome ~ ., data = train_data)
 nb.fit
 ```
+
 ```{r}
 nb.class <- predict(nb.fit, test_data)
+# Confusion Matrix
 table(nb.class, test_data$Outcome)
 mean(nb.class == test_data$Outcome)
 nb.preds <- predict(nb.fit, newdata = test_data, type = "raw")
 ```
+
 ```{r}
 brier_score(y_test_numeric, nb.preds[,2])
 ```
+
 ```{r}
+# ROC Curve and AUC
 roc_obj.nb <- roc(y_test_numeric, nb.preds[,2])
 plot(roc_obj.nb, type = "s", col = "tomato3")
-lines(roc_obj.l, type = "s", col = "turquoise3")
-plot(ci.se(roc_obj.l, specificities = seq(0, 1, l = 25)),
-     type = "shape", col = rgb(0, 0, 1, 0.2))
 auc(roc_obj.nb)
-auc(roc_obj.l)
 ```
 
 ```{r}
+#Calibration Curve
 valProbggplot(nb.preds[,2], y_test_numeric)
 ```
-### Decision Tree
+---
+
+### Model 5: Decision Tree
 
 ```{r}
-library(tree)
+# Removing Category 
 hcv_data <- dplyr::select(hcv_data, -Category)
 train_data <- dplyr::select(train_data, -Category)
 test_data  <- dplyr::select(test_data, -Category)
@@ -254,6 +264,7 @@ tree_pred <- predict(tree_model, newdata = test_data, type = "class")
 ```
 
 ```{r}
+# Confusion Matrix
 table(tree_pred, test_data$Outcome)
 mean(tree_pred == test_data$Outcome)
 ```
@@ -265,18 +276,62 @@ tree_prob <- predict(tree_model, newdata = test_data)[,2]
 brier_score(y_test_numeric, tree_prob)
 ```
 ```{r}
+# ROC Curve and AUC 
 roc_obj.tree <- roc(test_data$Outcome, tree_prob)
 plot(roc_obj.tree)
 auc(roc_obj.tree)
 ```
+---
+
+### Model Comparison: Summary Table
+
+```{r}
+# Logistic Regression
+logit_brier <- brier_score(y_test_numeric, prob_glm)
+logit_miscl <- mean(hcv.pred != test_data$Outcome)
+logit_auc   <- auc(roc_obj.l)
+
+# GAM
+gam_brier <- brier_score(y_test_numeric, hcv.probs.gam)
+gam_miscl <- mean(hcv.pred.gam != test_data$Outcome)
+gam_auc   <- auc(roc_obj_gam)
+
+# LDA
+lda_brier <- brier_score(y_test_numeric, hcv.probs.lda)
+lda_miscl <- mean(lda.class != test_data$Outcome)
+lda_auc   <- auc(roc_obj_lda)
+
+# Naive Bayes
+nb_brier <- brier_score(y_test_numeric, nb.preds[,2])
+nb_miscl <- mean(nb.class != test_data$Outcome)
+nb_auc   <- auc(roc_obj.nb)
+
+# Decision Tree
+tree_brier <- brier_score(y_test_numeric, tree_prob)
+tree_miscl <- mean(tree_pred != test_data$Outcome)
+tree_auc   <- auc(roc_obj.tree)
+
+# Create comparison table
+perf <- data.frame(
+  Model = c("Logistic Regression", "GAM", "LDA", "Naive Bayes", "Decision Tree"),
+  Brier_Score = round(c(logit_brier, gam_brier, lda_brier, nb_brier, tree_brier), 4),
+  Misclassification_Error = round(c(logit_miscl, gam_miscl, lda_miscl, nb_miscl, tree_miscl), 4),
+  AUC = round(c(logit_auc, gam_auc, lda_auc, nb_auc, tree_auc), 4)
+)
+
+perf
+```
+
+
+### Model Comparison: ROC Curves
 
 ```{r}
 plot(roc_obj.l, col = "red", main = "ROC curves")
-lines(roc_obj.lda, col = "blue")
-lines(roc_obj.qda, col = "green")
+lines(roc_obj_gam, col = "blue")
+lines(roc_obj_lda, col = "green")
 lines(roc_obj.nb, col = "purple")
 lines(roc_obj.tree, col = "orange")
-legend("bottomright", legend=c("Logistic","LDA","QDA","Naive Bayes","Tree"),
+legend("bottomright", legend=c("Logistic","GAM","LDA","Naive Bayes","Tree"),
        col=c("red","blue","green","purple","orange"), lwd=2)
 ```
 
