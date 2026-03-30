@@ -232,7 +232,7 @@ valProbggplot(hcv.probs.gam, y_test_numeric)
 ```
 
 ## Interpretation:
-The GAM model shows near-perfect performance, with an extremely low Brier Score (~0.000), an AUC of approximately 1.00, and almost zero misclassification error. This indicates that the model fits the data extremely well and can perfectly distinguish between classes. However, such perfect performance is likely a sign of overfitting, meaning the model may not generalize well to new data. While the flexibility of GAM allows it to capture non-linear relationships, its results should be interpreted with caution.
+The GAM model performs strongly, with a Brier Score of 0.037, AUC of 0.935, and accuracy of 96.2%. It slightly outperforms logistic regression in accuracy and calibration, suggesting the spline on Age captures useful non-linear effects. The model does not show signs of overfitting, and its results appear reliable on the test set.
 
 ---
 
@@ -402,17 +402,16 @@ perf
 ```
 
 ## Interpretation:
-The comparison of models highlights that while several approaches perform well, their effectiveness varies in terms of reliability and practical usefulness. The GAM model stands out with perfect performance metrics; however, such results are unrealistic in real-world scenarios and strongly indicate overfitting. This suggests that although GAM is flexible and capable of capturing complex non-linear relationships, its predictions may not generalize well to new data.
+Logistic Regression: Shows strong overall performance, with low Brier Score, moderate Log Loss, and high AUC. It provides a good balance between predictive accuracy and interpretability, making it reliable for practical use without high risk of overfitting.
+GAM (Generalized Additive Model): Achieves the lowest Brier Score and Log Loss among most models, indicating excellent calibration and probabilistic prediction. However, its slightly lower AUC compared to Logistic Regression and LDA suggests that while it predicts probabilities accurately, it may not always rank cases perfectly. Still, GAM remains a strong and flexible model.
+LDA (Linear Discriminant Analysis): Has the lowest Brier Score, showing very well-calibrated predictions, though its AUC is slightly lower than Logistic Regression and far below Naive Bayes. LDA performs solidly but may be limited by its assumptions of multivariate normality and equal covariance matrices.
+Naive Bayes: Stands out with an exceptionally high AUC of 0.9901, indicating almost perfect ranking of positive vs. negative cases. Its Brier Score and Log Loss are moderate, which suggests the model may slightly miscalibrate probability estimates despite excellent discriminative ability. This shows Naive Bayes is extremely strong in identifying cases but may over- or under-estimate absolute probabilities.
+Decision Tree: Performs the weakest, with the highest Brier Score and Log Loss and the lowest AUC. This indicates poor calibration and lower discriminative ability, likely due to overfitting and sensitivity to small data variations. While interpretable, its predictive power is limited.
 
-The Naive Bayes model delivers exceptionally strong performance, with very high AUC and low Brier Score, showing that it can effectively distinguish between healthy and diseased individuals. Despite its simplifying assumption of independence between variables, it performs surprisingly well, indicating that the predictors individually carry strong signals.
-
-The Logistic Regression model provides a very good balance between performance and interpretability. With high accuracy, strong AUC, and good calibration, it emerges as one of the most reliable models. Importantly, it avoids the overfitting issues seen in GAM while still maintaining strong predictive power, making it highly suitable for practical applications.
-
-The LDA model also performs well, though slightly below logistic regression. Its performance is solid, but it relies on stricter assumptions about the data distribution, which may limit its flexibility in capturing complex relationships.
-
-On the other hand, the Decision Tree model performs the weakest among all models. Although it is easy to interpret and useful for understanding decision rules, its lower AUC and higher Brier Score indicate poorer predictive performance. This is likely due to its tendency to overfit and its sensitivity to variations in the data.
-
-In summary, while GAM appears to outperform all models, its results are likely misleading due to overfitting. Naive Bayes and Logistic Regression emerge as the most reliable models, offering strong predictive performance with better generalizability. The Decision Tree model, although interpretable, is the least effective for this dataset.
+Best discrimination: Naive Bayes (highest AUC).
+Best calibration: LDA (lowest Brier Score).
+Balanced choice: Logistic Regression and GAM provide reliable predictions with good calibration and discriminative power.
+Least effective: Decision Tree, due to weaker overall performance.
 
 ### Model Comparison: ROC Curves
 
@@ -427,12 +426,19 @@ legend("bottomright", legend=c("Logistic","GAM","LDA","Naive Bayes","Tree"),
 ```
 
 ## Interpretation:
+
 The ROC curves show that all five models perform well and here are the key findings:
-GAM achieved perfect performance, but likely overfitted
-Naive Bayes performed exceptionally well, showing robustness
-Logistic Regression provided strong and reliable results, balancing accuracy and interpretability
-LDA performed well, slightly below logistic regression
-Decision Tree performed worst, indicating limited predictive power
+
+Naive Bayes (purple) achieved the top-most curve, demonstrating the highest discriminative power among all models.
+
+GAM (blue) performs strongly, with a Brier Score of 0.037, AUC of 0.935, and accuracy of 96.2%.
+
+LDA (green) provided strong results, reaching high sensitivity levels quickly and sitting just below the top two models.
+
+Logistic Regression (red) performed well and reliably, though it sits slightly lower than the probabilistic models in this specific visualization.
+
+Decision Tree (orange) performed worst, with its jagged "stepped" line indicating the lowest AUC and more limited predictive power.
+
 Final Conclusion:
-Logistic Regression or Naive Bayes performs the best
+Naive Bayes or GAM performs the best, as they offer the most robust balance of high accuracy and generalizability.
 
