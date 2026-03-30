@@ -44,6 +44,7 @@ library(MASS)
 library(pROC)
 library(e1071)
 library(tree)
+library(boot)
 ```
 
 ## Data Preparation
@@ -160,14 +161,20 @@ y_test_numeric  <- ifelse(test_data$Outcome  == "Disease", 1, 0)
 ```{r}
 # Fit logistic regression on training data
 glm_fit <- glm(Outcome ~ . - Category, data = train_data, family = binomial)
+summary(glm_fit)
+
+exp(coef(glm_fit))
+
+# K-Fold Cross Validation
+cv_error <- cv.glm(train_data, glm_fit, K = 5)$delta[1]
+cv_error
 
 # Predicted probabilities for test set
 prob_glm <- predict(glm_fit, newdata = test_data, type = "response")
 summary(prob_glm)
 
 # Brier score
-brier_score(y_test_numeric, prob_glm)
-
+brier_score(y_test_numeric, prob_glm) 
 ```
 
 ```{r}
@@ -198,7 +205,7 @@ The logistic regression model achieves a high accuracy of approximately 95%, cor
 ### Model 2: Logistic Regression with Spline on Age (GAM)
 
 ```{r}
-gam.hcv<-gam(Outcome ~s(Age)+ Category+Sex+ALB+ALP+ALT+AST+BIL+CHE+CHOL+CREA+GGT+PROT
+gam.hcv<-gam(Outcome ~s(Age) +Sex+ALB+ALP+ALT+AST+BIL+CHE+CHOL+CREA+GGT+PROT
 , data =train_data, family = binomial)
 plot(gam.hcv)
 hcv.probs.gam<-predict(gam.hcv, newdata = test_data, type = "response") 
@@ -316,11 +323,20 @@ The Naive Bayes model performs exceptionally well, with a very high AUC (~0.99),
 hcv_data <- dplyr::select(hcv_data, -Category)
 train_data <- dplyr::select(train_data, -Category)
 test_data  <- dplyr::select(test_data, -Category)
+
+# Model Implementation
 tree_model <- tree(Outcome ~ ., data = train_data)
+
+# Pruning
+cv_tree <- cv.tree(tree_model, FUN = prune.misclass)
+cv_tree
+best_size <- cv_tree$size[which.min(cv_tree$dev)]
+best_size
+pruned_tree <- prune.misclass(tree_model, best = best_size)
 ```
 
 ```{r}
-tree_pred <- predict(tree_model, newdata = test_data, type = "class")
+tree_pred <- predict(pruned_tree, newdata = test_data, type = "class")
 ```
 
 ```{r}
@@ -329,7 +345,7 @@ table(tree_pred, test_data$Outcome)
 mean(tree_pred == test_data$Outcome)
 ```
 ```{r}
-tree_prob <- predict(tree_model, newdata = test_data)[,2]
+tree_prob <- predict(pruned_tree, newdata = test_data)[,2]
 ```
 
 ```{r}
